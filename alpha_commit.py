@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from datetime import datetime
 from os.path import expanduser
@@ -9,6 +10,55 @@ import ast
 import requests
 from requests.auth import HTTPBasicAuth
 
+
+def setup_logger(name='AlphaCommit', log_dir='logs', level=logging.DEBUG):
+    """
+    初始化日志系统
+    - 控制台：显示INFO及以上
+    - 文件：记录DEBUG及以上，按日期分割
+    """
+    # 创建logger
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+
+    # 避免重复添加handler
+    if logger.handlers:
+        return logger
+
+    # 创建日志目录
+    if not os.path.exists(log_dir):
+        try:
+            os.makedirs(log_dir)
+        except OSError as e:
+            print(f"⚠️ 警告：无法创建日志目录 {log_dir}: {e}")
+
+    # 日志格式
+    formatter = logging.Formatter(
+        '[%(asctime)s] [%(levelname)-8s] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+
+    # 控制台Handler - 显示INFO及以上
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+    # 文件Handler - 记录DEBUG及以上
+    log_file = os.path.join(log_dir, f"alpha_commit_{datetime.now().strftime('%Y%m%d')}.log")
+    try:
+        file_handler = logging.FileHandler(log_file, encoding='utf-8')
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+    except PermissionError:
+        logger.warning(f"⚠️ 日志文件写入失败，仅输出到控制台: {log_file}")
+
+    return logger
+
+
+# 初始化全局logger
+logger = setup_logger()
 
 
 class BrainAPIClient:
@@ -33,10 +83,10 @@ class BrainAPIClient:
             if response.status_code not in [200, 201]:
                 raise Exception(f"认证失败: HTTP {response.status_code}")
 
-            print("✅ 认证成功!")
+            logger.info("✅ 认证成功!")
 
         except Exception as e:
-            print(f"❌ 认证错误: {str(e)}")
+            logger.error(f"❌ 认证错误: {str(e)}")
             raise
 
     def submit_alpha(self, alpha_id):
@@ -45,14 +95,14 @@ class BrainAPIClient:
         submit_url = f"{self.API_BASE_URL}/alphas/{alpha_id}/submit"
 
         for attempt in range(5):
-            print(f"🔄 第 {attempt + 1} 次尝试提交 Alpha {alpha_id}")
+            logger.info(f"🔄 第 {attempt + 1} 次尝试提交 Alpha {alpha_id}")
 
             # POST 请求
             res = self.session.post(submit_url)
             if res.status_code == 201:
-                print("✅ POST:等待提交完成...")
+                logger.info("✅ POST:等待提交完成...")
             elif res.status_code in [400, 403]:
-                print(f"❌ 提交被拒绝 ({res.status_code})")
+                logger.warning(f"❌ 提交被拒绝 ({res.status_code})")
                 return False
             else:
                 sleep(3)
@@ -65,7 +115,7 @@ class BrainAPIClient:
 
                 if retry == 0:
                     if res.status_code == 200:
-                        print("✅ 提交成功!")
+                        logger.info("✅ 提交成功!")
                         return True
                     else:
                         data = res.json()
@@ -76,7 +126,7 @@ class BrainAPIClient:
                         f"TURNOVER: PASS[{check_results.get('HIGH_TURNOVER')}], " \
                         f"SUB_UNIVERSE_SHARPE: PASS[{check_results.get('LOW_SUB_UNIVERSE_SHARPE')}], " \
                         f"SELF_CORRELATION: FAIL[{check_results.get('SELF_CORRELATION')}]")
-                        print(msg)
+                        logger.error(msg)
                         return False
 
                 sleep(retry)
@@ -175,13 +225,41 @@ def save_candidate_alpha_ids(simulated_alphas_file, candidate_alpha_id_file):
         with open(candidate_alpha_id_file, 'w', encoding='utf-8') as f:
             for aid in valid_alpha_ids:
                 f.write(f"{aid}\n")
-                
-        print(f"处理完成：共找到 {len(valid_alpha_ids)} 个合格的 Alpha，已保存至 {candidate_alpha_id_file}")
+
+        logger.info(f"处理完成：共找到 {len(valid_alpha_ids)} 个合格的 Alpha，已保存至 {candidate_alpha_id_file}")
 
     except FileNotFoundError:
-        print(f"错误：找不到文件 {simulated_alphas_file}")
+        logger.error(f"错误：找不到文件 {simulated_alphas_file}")
     except Exception as e:
-        print(f"发生未知错误：{e}")
+        logger.error(f"发生未知错误：{e}")
+
+
+def _remove_alpha_id_from_file(alpha_id_path, alpha_id):
+    """
+    实时从文件中移除已处理的 Alpha ID
+    用于确保程序中断时不会丢失处理进度
+
+    应用原则:
+    - SOLID: 单一职责原则，专注文件更新操作
+    - KISS: 简单直接的文件读写逻辑
+    """
+    try:
+        if not os.path.exists(alpha_id_path):
+            return
+
+        with open(alpha_id_path, 'r') as f:
+            alpha_ids = [line.strip() for line in f.readlines() if line.strip()]
+
+        # 移除已处理的ID
+        if alpha_id in alpha_ids:
+            alpha_ids.remove(alpha_id)
+
+            with open(alpha_id_path, 'w') as f:
+                f.writelines([f"{aid}\n" for aid in alpha_ids])
+
+            logger.debug(f"✅ 已从文件中移除 Alpha ID: {alpha_id}")
+    except Exception as e:
+        logger.error(f"❌ 更新文件时出错: {str(e)}")
 
 
 def submit_alpha_ids(alpha_id_path, num_to_submit=2):
@@ -189,46 +267,60 @@ def submit_alpha_ids(alpha_id_path, num_to_submit=2):
     brain = BrainAPIClient()
     try:
         if not os.path.exists(alpha_id_path):
-            print("❌ 没有找到保存的Alpha ID文件")
+            logger.error("❌ 没有找到保存的Alpha ID文件")
             return
 
         with open(alpha_id_path, 'r') as f:
             alpha_ids = [line.strip() for line in f.readlines() if line.strip()]
 
         if not alpha_ids:
-            print("❌ 没有可提交的Alpha ID")
+            logger.warning("❌ 没有可提交的Alpha ID")
             return
 
-        print(f"\n📝 已保存的Alpha ID列表共 {len(alpha_ids)} 个")
-        
+        logger.info(f"\n📝 已保存的Alpha ID列表共 {len(alpha_ids)} 个")
 
+        # 实时提交并更新文件 (应用原则: SOLID单一职责, KISS保持简单)
         if num_to_submit > len(alpha_ids):
             num_to_submit = len(alpha_ids)
+
         successful, failed = [], []
         idx = 0
-        while len(successful) < num_to_submit and idx < len(alpha_ids):  # 添加索引边界检查
-            selected_ids = alpha_ids[idx: idx + (num_to_submit - len(successful))]
-            if not selected_ids:  # 防御性检查
-                break
-            new_successful, new_failed = brain.submit_multiple_alphas(selected_ids)
-            successful.extend(new_successful)
-            failed.extend(new_failed)
-            idx += len(selected_ids)
 
+        # 使用 try-finally 确保中断时也能保存进度
+        try:
+            while len(successful) < num_to_submit and idx < len(alpha_ids):
+                alpha_id = alpha_ids[idx]
+
+                # 提交单个 Alpha
+                if brain.submit_alpha(alpha_id):
+                    successful.append(alpha_id)
+                    logger.info(f"✅ Alpha {alpha_id} 提交成功，立即更新文件")
+                else:
+                    failed.append(alpha_id)
+                    logger.warning(f"❌ Alpha {alpha_id} 提交失败，立即更新文件")
+
+                # 立即从文件中移除已处理的ID (无论成功或失败)
+                _remove_alpha_id_from_file(alpha_id_path, alpha_id)
+
+                idx += 1
+
+                # 如果还有更多alpha要提交，等待10秒
+                if len(successful) < num_to_submit and idx < len(alpha_ids):
+                    sleep(10)
+
+        except KeyboardInterrupt:
+            logger.warning(f"⚠️ 用户中断! 已成功提交 {len(successful)} 个, 失败 {len(failed)} 个")
+            logger.info(f"💾 进度已保存，剩余 {len(alpha_ids) - idx} 个待处理")
+            raise
+
+        # 最终统计
         if len(successful) < num_to_submit:
-            print(f"⚠️ 警告: 仅成功提交 {len(successful)} 个,目标是 {num_to_submit} 个")
+            logger.warning(f"⚠️ 警告: 仅成功提交 {len(successful)} 个,目标是 {num_to_submit} 个")
         else:
-            print(f"✅ 成功提交 {len(successful)} 个 Alpha ID")
-        
-        # 更新 alpha_ids.txt
-        successful_set = set(successful)
-        failed_set = set(failed)
-        remaining_ids = list(set(alpha_ids).difference(successful_set, failed_set))
-        with open(alpha_id_path, 'w') as f:
-            f.writelines([f"{id}\n" for id in remaining_ids])
+            logger.info(f"✅ 成功提交 {len(successful)} 个 Alpha ID")
 
     except Exception as e:
-        print(f"❌ 提交 Alpha 时出错: {str(e)}")
+        logger.error(f"❌ 提交 Alpha 时出错: {str(e)}")
 
 
 def main():
