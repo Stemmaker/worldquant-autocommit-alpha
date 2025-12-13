@@ -15,10 +15,14 @@ class BrainAPIClient:
     API_BASE_URL = 'https://api.worldquantbrain.com'
 
     def __init__(self, credentials_file='brain_credentials_copy.txt'):
+        """初始化 API 客户端"""
+
         self.session = requests.Session()
         self._setup_authentication(credentials_file)
 
     def _setup_authentication(self, credentials_file):
+        """设置认证"""
+
         try:
             with open(expanduser(credentials_file)) as f:
                 credentials = json.load(f)
@@ -64,7 +68,15 @@ class BrainAPIClient:
                         print("✅ 提交成功!")
                         return True
                     else:
-                        print(f"❌ 提交失败: HTTP {res.status_code}")
+                        data = res.json()
+                        checks = data.get('is', {}).get('checks', [])
+                        check_results = {item.get('name'): item.get('value') for item in checks}
+                        msg = (f"❌ 提交失败: SHARPE: PASS[{check_results.get('LOW_SHARPE')}], " \
+                        f"FITNESS: PASS[{check_results.get('LOW_FITNESS')}], " \
+                        f"TURNOVER: PASS[{check_results.get('HIGH_TURNOVER')}], " \
+                        f"SUB_UNIVERSE_SHARPE: PASS[{check_results.get('LOW_SUB_UNIVERSE_SHARPE')}], " \
+                        f"SELF_CORRELATION: FAIL[{check_results.get('SELF_CORRELATION')}]")
+                        print(msg)
                         return False
 
                 sleep(retry)
@@ -221,8 +233,8 @@ def submit_alpha_ids(alpha_id_path, num_to_submit=2):
 
 def main():
     print("🚀 启动 WorldQuant Brain Alpha 提交系统")
-    alpha_id_path = "alpha_ids.txt"
-    simulated_alphas_file = "test.csv"
+    alpha_id_path = "alpha_ids/alpha_ids.txt"
+    simulated_alphas_file = "simulated_alphas/simulated_alphas_2025-12-10.csv"
     print("\n📋 请选择操作:")
     print("1: 提取合格 Alpha ID 并保存")
     print("2: 提交已保存的合格 Alpha ID")

@@ -4,7 +4,8 @@
       "Bash(gh:*)",
       "Bash(git --version)",
       "Bash(git init:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nInitial release: WorldQuant Brain Alpha auto-submit system\n\n🚀 Features:\n- Automatic login to WorldQuant Brain API\n- Smart filtering of qualified Alphas (6 metrics must PASS)\n- Batch submission with retry mechanism\n- Auto-detect SC factors during submission\n- Maintain un-submitted Alpha list\n\n📁 Files:\n- alpha_commit.py: Main application\n- README.md: Documentation\n- .gitignore: Ignore sensitive files\n\n⚠️ Security:\n- brain_credentials_copy.txt is git-ignored for security\n\n🤖 Generated with Claude Code\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
     ]
   }
 }

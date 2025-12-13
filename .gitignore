@@ -28,6 +28,7 @@ env/
 ENV/
 env.bak/
 venv.bak/
+.claude/
 
 # IDE
 .vscode/
