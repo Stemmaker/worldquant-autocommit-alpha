@@ -1,5 +1,6 @@
 # WorldQuant Brain Alpha 自动提交系统
 
+![](imgs/running_state.png)
 ## 项目简介
 
 紧接入门四课程后从模板中批量生成的alpha，能自动筛选合格的Alpha并按数量提交
