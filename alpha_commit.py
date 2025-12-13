@@ -325,8 +325,8 @@ def submit_alpha_ids(alpha_id_path, num_to_submit=2):
 
 def main():
     print("🚀 启动 WorldQuant Brain Alpha 提交系统")
-    alpha_id_path = "alpha_ids/alpha_ids.txt"
-    simulated_alphas_file = "simulated_alphas/simulated_alphas_2025-12-10.csv"
+    alpha_id_path = "alpha_ids.txt"
+    simulated_alphas_file = "simulated_alphas_2025-12-10.csv"
     print("\n📋 请选择操作:")
     print("1: 提取合格 Alpha ID 并保存")
     print("2: 提交已保存的合格 Alpha ID")
