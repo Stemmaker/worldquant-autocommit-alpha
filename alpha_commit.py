@@ -78,6 +78,7 @@ class BrainAPIClient:
                 credentials = json.load(f)
             username, password = credentials
             self.session.auth = HTTPBasicAuth(username, password)
+            self.session.trust_env = False # 禁用代理
 
             response = self.session.post(f"{self.API_BASE_URL}/authentication")
             if response.status_code not in [200, 201]:
